@@ -42,14 +42,30 @@ async function getIdentityData(req: NextApiRequest) {
     : null;
 
   if (username) {
-    const user = await prisma.user.findFirst({
+    const users = await prisma.user.findMany({
       where: {
-        username,
-        organization: orgQuery,
+        ...(orgQuery
+          ? {
+              profiles: {
+                some: {
+                  username,
+                  organization: orgQuery,
+                },
+              },
+            }
+          : {
+              username,
+              // If a user is moved, it isn't actually available outside of the organization. So, for non-org domain check for movedToProfileId
+              movedToProfileId: null,
+            }),
       },
       select: { avatar: true, email: true },
     });
 
+    if (users.length > 1) {
+      throw new Error(`More than one user found for username "${username}"`);
+    }
+    const [user] = users;
     return {
       name: username,
       email: user?.email,
@@ -105,8 +121,6 @@ async function getIdentityData(req: NextApiRequest) {
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const identity = await getIdentityData(req);
   const img = identity?.avatar;
-  // We cache for one day
-  res.setHeader("Cache-Control", "s-maxage=86400, stale-while-revalidate=60");
   // If image isn't set or links to this route itself, use default avatar
   if (!img) {
     if (identity?.org) {

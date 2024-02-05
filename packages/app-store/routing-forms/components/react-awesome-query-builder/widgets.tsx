@@ -134,7 +134,7 @@ function NumberWidget({ value, setValue, ...remainingProps }: TextLikeComponentP
       type="number"
       labelSrOnly={remainingProps.noLabel}
       containerClassName="w-full"
-      className="bg-default border-default disabled:bg-emphasis focus:ring-brand-default dark:focus:border-emphasis block w-full rounded-md text-sm focus:border-neutral-300 disabled:hover:cursor-not-allowed"
+      className="bg-default border-default disabled:bg-emphasis focus:ring-brand-default dark:focus:border-emphasis focus:border-subtle block w-full rounded-md text-sm disabled:hover:cursor-not-allowed"
       value={value}
       onChange={(e) => {
         setValue(e.target.value);
@@ -166,6 +166,7 @@ const MultiSelectWidget = ({
 
   return (
     <Select
+      aria-label="multi-select-dropdown"
       className="mb-2"
       onChange={(items) => {
         setValue(items?.map((item) => item.value));
@@ -193,6 +194,7 @@ function SelectWidget({ listValues, setValue, value, ...remainingProps }: Select
 
   return (
     <Select
+      aria-label="select-dropdown"
       className="data-testid-select mb-2"
       onChange={(item) => {
         if (!item) {

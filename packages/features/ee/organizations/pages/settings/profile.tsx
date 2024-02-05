@@ -1,8 +1,10 @@
+"use client";
+
 import { zodResolver } from "@hookform/resolvers/zod";
 import type { Prisma } from "@prisma/client";
 import { LinkIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState, useLayoutEffect } from "react";
+import { useState, useLayoutEffect, useEffect } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { z } from "zod";
 
@@ -77,13 +79,22 @@ const OrgProfileView = () => {
     document.body.focus();
   }, []);
 
-  const { data: currentOrganisation, isLoading } = trpc.viewer.organizations.listCurrent.useQuery(undefined, {
-    onError: () => {
-      router.push("/settings");
-    },
-  });
+  const {
+    data: currentOrganisation,
+    isPending,
+    error,
+  } = trpc.viewer.organizations.listCurrent.useQuery(undefined, {});
 
-  if (isLoading || !orgBranding || !currentOrganisation) {
+  useEffect(
+    function refactorMeWithoutEffect() {
+      if (error) {
+        router.push("/settings");
+      }
+    },
+    [error]
+  );
+
+  if (isPending || !orgBranding || !currentOrganisation) {
     return <SkeletonLoader title={t("profile")} description={t("profile_org_description")} />;
   }
 
@@ -116,7 +127,7 @@ const OrgProfileView = () => {
           <div className="border-subtle flex rounded-b-md border border-t-0 px-4 py-8 sm:px-6">
             <div className="flex-grow">
               <div>
-                <Label className="text-emphasis">{t("org_name")}</Label>
+                <Label className="text-emphasis">{t("organization_name")}</Label>
                 <p className="text-default text-sm">{currentOrganisation?.name}</p>
               </div>
               {!isBioEmpty && (
@@ -205,6 +216,7 @@ const OrgProfileForm = ({ defaultValues }: { defaultValues: FormValues }) => {
               return (
                 <>
                   <Avatar
+                    data-testid="profile-upload-avatar"
                     alt={defaultValues.name || ""}
                     imageSrc={getPlaceholderAvatar(value, defaultValues.name as string)}
                     size="lg"
@@ -245,7 +257,7 @@ const OrgProfileForm = ({ defaultValues }: { defaultValues: FormValues }) => {
             <div className="mt-8">
               <TextField
                 name="name"
-                label={t("org_name")}
+                label={t("organization_name")}
                 value={value}
                 onChange={(e) => {
                   form.setValue("name", e?.target.value, { shouldDirty: true });
@@ -261,7 +273,7 @@ const OrgProfileForm = ({ defaultValues }: { defaultValues: FormValues }) => {
             <div className="mt-8">
               <TextField
                 name="slug"
-                label={t("org_url")}
+                label={t("organization_url")}
                 value={value}
                 disabled
                 addOnSuffix={`.${subdomainSuffix()}`}
@@ -283,7 +295,7 @@ const OrgProfileForm = ({ defaultValues }: { defaultValues: FormValues }) => {
         <p className="text-default mt-2 text-sm">{t("org_description")}</p>
       </div>
       <SectionBottomActions align="end">
-        <Button color="primary" type="submit" loading={mutation.isLoading} disabled={isDisabled}>
+        <Button color="primary" type="submit" loading={mutation.isPending} disabled={isDisabled}>
           {t("update")}
         </Button>
       </SectionBottomActions>

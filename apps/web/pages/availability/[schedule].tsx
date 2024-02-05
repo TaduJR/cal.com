@@ -93,7 +93,7 @@ export default function Availability() {
   const fromEventType = searchParams?.get("fromEventType");
   const { timeFormat } = me.data || { timeFormat: null };
   const [openSidebar, setOpenSidebar] = useState(false);
-  const { data: schedule, isLoading } = trpc.viewer.availability.schedule.get.useQuery(
+  const { data: schedule, isPending } = trpc.viewer.availability.schedule.get.useQuery(
     { scheduleId },
     {
       enabled: !!scheduleId,
@@ -158,7 +158,7 @@ export default function Availability() {
           control={form.control}
           name="name"
           render={({ field }) => (
-            <EditableHeading isReady={!isLoading} {...field} data-testid="availablity-title" />
+            <EditableHeading isReady={!isPending} {...field} data-testid="availablity-title" />
           )}
         />
       }
@@ -188,7 +188,7 @@ export default function Availability() {
             </Skeleton>
             <Switch
               id="hiddenSwitch"
-              disabled={isLoading || schedule?.isDefault}
+              disabled={isPending || schedule?.isDefault}
               checked={form.watch("isDefault")}
               onCheckedChange={(e) => {
                 form.setValue("isDefault", e);
@@ -210,7 +210,7 @@ export default function Availability() {
               />
             </DialogTrigger>
             <ConfirmationDialogContent
-              isLoading={deleteMutation.isLoading}
+              isPending={deleteMutation.isPending}
               variety="danger"
               title={t("delete_schedule")}
               confirmBtnText={t("delete")}
@@ -249,7 +249,7 @@ export default function Availability() {
                     />
                   </DialogTrigger>
                   <ConfirmationDialogContent
-                    isLoading={deleteMutation.isLoading}
+                    isPending={deleteMutation.isPending}
                     variety="danger"
                     title={t("delete_schedule")}
                     confirmBtnText={t("delete")}
@@ -269,7 +269,7 @@ export default function Availability() {
                   name="name"
                   render={({ field }) => (
                     <input
-                      className="hover:border-emphasis dark:focus:border-emphasis border-default bg-default placeholder:text-muted text-emphasis focus:ring-brand-default disabled:bg-subtle disabled:hover:border-subtle mb-2 block h-9 w-full rounded-md border px-3 py-2 text-sm leading-4 focus:border-neutral-300 focus:outline-none focus:ring-2 disabled:cursor-not-allowed"
+                      className="hover:border-emphasis dark:focus:border-emphasis border-default bg-default placeholder:text-muted text-emphasis focus:ring-brand-default disabled:bg-subtle disabled:hover:border-subtle focus:border-subtle mb-2 block h-9 w-full rounded-md border px-3 py-2 text-sm leading-4 focus:outline-none focus:ring-2 disabled:cursor-not-allowed"
                       {...field}
                     />
                   )}
@@ -284,7 +284,7 @@ export default function Availability() {
                 </Skeleton>
                 <Switch
                   id="hiddenSwitch"
-                  disabled={isLoading || schedule?.isDefault}
+                  disabled={isPending || schedule?.isDefault}
                   checked={form.watch("isDefault")}
                   onCheckedChange={(e) => {
                     form.setValue("isDefault", e);
@@ -334,7 +334,7 @@ export default function Availability() {
             className="ml-4 lg:ml-0"
             type="submit"
             form="availability-form"
-            loading={updateMutation.isLoading}>
+            loading={updateMutation.isPending}>
             {t("save")}
           </Button>
           <Button

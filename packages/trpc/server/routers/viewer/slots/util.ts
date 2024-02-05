@@ -13,6 +13,7 @@ import { getDefaultEvent } from "@calcom/lib/defaultEvents";
 import isTimeOutOfBounds from "@calcom/lib/isOutOfBounds";
 import logger from "@calcom/lib/logger";
 import { performance } from "@calcom/lib/server/perfObserver";
+import { UserRepository } from "@calcom/lib/server/repository/user";
 import getSlots from "@calcom/lib/slots";
 import prisma, { availabilityUserSelect } from "@calcom/prisma";
 import { SchedulingType } from "@calcom/prisma/enums";
@@ -153,10 +154,12 @@ export async function getEventType(
       afterEventBuffer: true,
       bookingLimits: true,
       durationLimits: true,
+      assignAllTeamMembers: true,
       schedulingType: true,
       periodType: true,
       periodStartDate: true,
       periodEndDate: true,
+      onlyShowFirstAvailableSlot: true,
       periodCountCalendarDays: true,
       periodDays: true,
       metadata: true,
@@ -224,17 +227,16 @@ export async function getDynamicEventType(
     });
   }
   const dynamicEventType = getDefaultEvent(input.eventTypeSlug);
+  const { where } = await UserRepository._getWhereClauseForFindingUsersByUsername({
+    orgSlug: isValidOrgDomain ? currentOrgDomain : null,
+    usernameList: Array.isArray(input.usernameList)
+      ? input.usernameList
+      : input.usernameList
+      ? [input.usernameList]
+      : [],
+  });
   const users = await prisma.user.findMany({
-    where: {
-      username: {
-        in: Array.isArray(input.usernameList)
-          ? input.usernameList
-          : input.usernameList
-          ? [input.usernameList]
-          : [],
-      },
-      organization: isValidOrgDomain && currentOrgDomain ? getSlugOrRequestedSlug(currentOrgDomain) : null,
-    },
+    where,
     select: {
       allowDynamicBooking: true,
       ...availabilityUserSelect,
@@ -292,7 +294,7 @@ export async function getAvailableSlots({ input, ctx }: GetScheduleOptions) {
     }`
   );
   const getStartTime = (startTimeInput: string, timeZone?: string) => {
-    const startTimeMin = dayjs.utc().add(eventType.minimumBookingNotice, "minutes");
+    const startTimeMin = dayjs.utc().add(eventType.minimumBookingNotice || 1, "minutes");
     const startTime = timeZone === "Etc/GMT" ? dayjs.utc(startTimeInput) : dayjs(startTimeInput).tz(timeZone);
 
     return startTimeMin.isAfter(startTime) ? startTimeMin.tz(timeZone) : startTime;
@@ -327,8 +329,8 @@ export async function getAvailableSlots({ input, ctx }: GetScheduleOptions) {
     input.rescheduleUid && durationToUse ? endTime.add(durationToUse, "minute").toDate() : endTime.toDate();
 
   const sharedQuery = {
-    startTime: { gte: startTimeDate },
-    endTime: { lte: endTimeDate },
+    startTime: { lte: endTimeDate },
+    endTime: { gte: startTimeDate },
     status: {
       in: [BookingStatus.ACCEPTED],
     },
@@ -368,6 +370,7 @@ export async function getAvailableSlots({ input, ctx }: GetScheduleOptions) {
       eventType: {
         select: {
           id: true,
+          onlyShowFirstAvailableSlot: true,
           afterEventBuffer: true,
           beforeEventBuffer: true,
           seatsPerTimeSlot: true,
@@ -577,6 +580,9 @@ export async function getAvailableSlots({ input, ctx }: GetScheduleOptions) {
       const dateString = formatter.format(time.toDate());
 
       r[dateString] = r[dateString] || [];
+      if (eventType.onlyShowFirstAvailableSlot && r[dateString].length > 0) {
+        return r;
+      }
       r[dateString].push({
         ...passThroughProps,
         time: time.toISOString(),
@@ -614,14 +620,10 @@ async function getUserIdFromUsername(
   organizationDetails: { currentOrgDomain: string | null; isValidOrgDomain: boolean }
 ) {
   const { currentOrgDomain, isValidOrgDomain } = organizationDetails;
-  const user = await prisma.user.findFirst({
-    where: {
-      username,
-      organization: isValidOrgDomain && currentOrgDomain ? getSlugOrRequestedSlug(currentOrgDomain) : null,
-    },
-    select: {
-      id: true,
-    },
+
+  const [user] = await UserRepository.findUsersByUsername({
+    usernameList: [username],
+    orgSlug: isValidOrgDomain ? currentOrgDomain : null,
   });
   return user?.id;
 }

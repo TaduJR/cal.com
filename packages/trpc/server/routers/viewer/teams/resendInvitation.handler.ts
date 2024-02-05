@@ -37,6 +37,7 @@ export const resendInvitationHandler = async ({ ctx, input }: InviteMemberOption
   const inviteTeamOptions = {
     joinLink: `${WEBAPP_URL}/auth/login?callbackUrl=/settings/teams`,
     isCalcomMember: true,
+    isAutoJoin: false,
   };
 
   if (verificationToken) {
@@ -51,10 +52,13 @@ export const resendInvitationHandler = async ({ ctx, input }: InviteMemberOption
     language: translation,
     from: ctx.user.name || `${team.name}'s admin`,
     to: input.email,
-    teamName: team?.parent?.name || team.name,
+    teamName: team.name,
     ...inviteTeamOptions,
     isOrg: input.isOrg,
+    parentTeamName: team?.parent?.name,
   });
 
   return input;
 };
+
+export default resendInvitationHandler;

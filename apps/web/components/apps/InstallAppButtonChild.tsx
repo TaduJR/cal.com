@@ -60,7 +60,7 @@ export const InstallAppButtonChild = ({
         disabled={shouldDisableInstallation}
         color="primary"
         size="base">
-        {paid.trial ? t("start_paid_trial") : t("install_paid_app")}
+        {paid.trial ? t("start_paid_trial") : t("subscribe")}
       </Button>
     );
   }
@@ -100,9 +100,9 @@ export const InstallAppButtonChild = ({
         <DropdownMenuContent
           className="w-auto"
           onInteractOutside={(event) => {
-            if (mutation.isLoading) event.preventDefault();
+            if (mutation.isPending) event.preventDefault();
           }}>
-          {mutation.isLoading && (
+          {mutation.isPending && (
             <div className="z-1 fixed inset-0 flex items-center justify-center">
               <Spinner />
             </div>

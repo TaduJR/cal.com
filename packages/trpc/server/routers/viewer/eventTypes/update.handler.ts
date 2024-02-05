@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import type { NextApiResponse, GetServerSidePropsContext } from "next";
 
+import type { appDataSchemas } from "@calcom/app-store/apps.schemas.generated";
 import updateChildrenEventTypes from "@calcom/features/ee/managed-event-types/lib/handleChildrenEventTypes";
 import { validateIntervalLimitOrder } from "@calcom/lib";
 import logger from "@calcom/lib/logger";
@@ -38,6 +39,7 @@ export const updateHandler = async ({ ctx, input }: UpdateOptions) => {
     recurringEvent,
     users,
     children,
+    assignAllTeamMembers,
     hosts,
     id,
     hashedLink,
@@ -64,9 +66,33 @@ export const updateHandler = async ({ ctx, input }: UpdateOptions) => {
       },
       team: {
         select: {
-          name: true,
           id: true,
+          name: true,
+          slug: true,
           parentId: true,
+          parent: {
+            select: {
+              slug: true,
+            },
+          },
+          members: {
+            select: {
+              role: true,
+              accepted: true,
+              user: {
+                select: {
+                  name: true,
+                  id: true,
+                  email: true,
+                  eventTypes: {
+                    select: {
+                      slug: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
         },
       },
     },
@@ -195,10 +221,13 @@ export const updateHandler = async ({ ctx, input }: UpdateOptions) => {
     }
     data.hosts = {
       deleteMany: {},
-      create: hosts.map((host) => ({
-        ...host,
-        isFixed: data.schedulingType === SchedulingType.COLLECTIVE || host.isFixed,
-      })),
+      create: hosts.map((host) => {
+        const { ...rest } = host;
+        return {
+          ...rest,
+          isFixed: data.schedulingType === SchedulingType.COLLECTIVE || host.isFixed,
+        };
+      }),
     };
   }
 
@@ -240,31 +269,14 @@ export const updateHandler = async ({ ctx, input }: UpdateOptions) => {
     }
   }
 
-  /**
-   * Since you can have multiple payment apps we will honor the first one to save in eventType
-   * but the real detail will be inside app metadata, so with this you can have different prices in different apps
-   * So the price and currency inside eventType will be deprecated soon or just keep as reference.
-   */
-  if (
-    input.metadata?.apps?.alby?.price ||
-    input?.metadata?.apps?.paypal?.price ||
-    input?.metadata?.apps?.stripe?.price
-  ) {
-    data.price =
-      input.metadata?.apps?.alby?.price ||
-      input.metadata.apps.paypal?.price ||
-      input.metadata.apps.stripe?.price;
-  }
-
-  if (
-    input.metadata?.apps?.alby?.currency ||
-    input?.metadata?.apps?.paypal?.currency ||
-    input?.metadata?.apps?.stripe?.currency
-  ) {
-    data.currency =
-      input.metadata?.apps?.alby?.currency ||
-      input.metadata.apps.paypal?.currency ||
-      input.metadata.apps.stripe?.currency;
+  for (const appKey in input.metadata?.apps) {
+    const app = input.metadata?.apps[appKey as keyof typeof appDataSchemas];
+    // There should only be one enabled payment app in the metadata
+    if (app.enabled && app.price && app.currency) {
+      data.price = app.price;
+      data.currency = app.currency;
+      break;
+    }
   }
 
   const connectedLink = await ctx.prisma.hashedLink.findFirst({
@@ -306,6 +318,8 @@ export const updateHandler = async ({ ctx, input }: UpdateOptions) => {
     }
   }
 
+  data.assignAllTeamMembers = assignAllTeamMembers ?? false;
+
   const updatedEventTypeSelect = Prisma.validator<Prisma.EventTypeSelect>()({
     slug: true,
     schedulingType: true,
@@ -336,8 +350,10 @@ export const updateHandler = async ({ ctx, input }: UpdateOptions) => {
     connectedLink,
     updatedEventType,
     children,
+    profileId: ctx.user.profile.id,
     prisma: ctx.prisma,
   });
+
   const res = ctx.res as NextApiResponse;
   if (typeof res?.revalidate !== "undefined") {
     try {

@@ -5,15 +5,11 @@ import { totp } from "otplib";
 import { sendOrganizationEmailVerification } from "@calcom/emails";
 import { sendAdminOrganizationNotification } from "@calcom/emails";
 import { hashPassword } from "@calcom/features/auth/lib/hashPassword";
-import { subdomainSuffix } from "@calcom/features/ee/organizations/lib/orgDomains";
 import { DEFAULT_SCHEDULE, getAvailabilityFromSchedule } from "@calcom/lib/availability";
-import {
-  IS_TEAM_BILLING_ENABLED,
-  RESERVED_SUBDOMAINS,
-  IS_PRODUCTION,
-  WEBAPP_URL,
-} from "@calcom/lib/constants";
+import { IS_TEAM_BILLING_ENABLED, RESERVED_SUBDOMAINS, WEBAPP_URL } from "@calcom/lib/constants";
+import { createDomain } from "@calcom/lib/domainManager/organization";
 import { getTranslation } from "@calcom/lib/server/i18n";
+import { ProfileRepository } from "@calcom/lib/server/repository/profile";
 import slugify from "@calcom/lib/slugify";
 import { prisma } from "@calcom/prisma";
 import { MembershipRole, UserPermissionRole } from "@calcom/prisma/enums";
@@ -39,30 +35,6 @@ const getIPAddress = async (url: string): Promise<string> => {
   });
 };
 
-const vercelCreateDomain = async (domain: string) => {
-  const response = await fetch(
-    `https://api.vercel.com/v9/projects/${process.env.PROJECT_ID_VERCEL}/domains?teamId=${process.env.TEAM_ID_VERCEL}`,
-    {
-      body: JSON.stringify({ name: `${domain}.${subdomainSuffix()}` }),
-      headers: {
-        Authorization: `Bearer ${process.env.AUTH_BEARER_TOKEN_VERCEL}`,
-        "Content-Type": "application/json",
-      },
-      method: "POST",
-    }
-  );
-
-  const data = await response.json();
-
-  // Domain is already owned by another team but you can request delegation to access it
-  if (data.error?.code === "forbidden") return false;
-
-  // Domain is already being used by a different project
-  if (data.error?.code === "domain_taken") return false;
-
-  return true;
-};
-
 export const createHandler = async ({ input, ctx }: CreateOptions) => {
   const { slug, name, adminEmail, adminUsername, check } = input;
 
@@ -72,17 +44,22 @@ export const createHandler = async ({ input, ctx }: CreateOptions) => {
     },
   });
 
-  // An org doesn't have a parentId. A team that isn't part of an org also doesn't have a parentId.
-  // So, an org can't have the same slug as a non-org team.
-  // There is a unique index on [slug, parentId] in Team because we don't add the slug to the team always. We only add metadata.requestedSlug in some cases. So, DB won't prevent creation of such an organization.
-  const hasANonOrgTeamOrOrgWithSameSlug = await prisma.team.findFirst({
+  const hasAnOrgWithSameSlug = await prisma.team.findFirst({
     where: {
       slug: slug,
       parentId: null,
+      metadata: {
+        path: ["isOrganization"],
+        equals: true,
+      },
     },
   });
 
-  if (hasANonOrgTeamOrOrgWithSameSlug || RESERVED_SUBDOMAINS.includes(slug))
+  // Allow creating an organization with same requestedSlug as a non-org Team's slug
+  // It is needed so that later we can migrate the non-org Team(with the conflicting slug) to the newly created org
+  // Publishing the organization would fail if the team with the same slug is not migrated first
+
+  if (hasAnOrgWithSameSlug || RESERVED_SUBDOMAINS.includes(slug))
     throw new TRPCError({ code: "BAD_REQUEST", message: "organization_url_taken" });
   if (userCollisions) throw new TRPCError({ code: "BAD_REQUEST", message: "admin_email_taken" });
 
@@ -98,12 +75,9 @@ export const createHandler = async ({ input, ctx }: CreateOptions) => {
   let isOrganizationConfigured = false;
 
   if (check === false) {
-    // eslint-disable-next-line turbo/no-undeclared-env-vars
-    if (process.env.VERCEL) {
-      // We only want to proceed to register the subdomain for the org in Vercel
-      // within a Vercel context
-      isOrganizationConfigured = await vercelCreateDomain(slug);
-    } else {
+    isOrganizationConfigured = await createDomain(slug);
+
+    if (!isOrganizationConfigured) {
       // Otherwise, we proceed to send an administrative email to admins regarding
       // the need to configure DNS registry to support the newly created org
       const instanceAdmins = await prisma.user.findMany({
@@ -125,57 +99,68 @@ export const createHandler = async ({ input, ctx }: CreateOptions) => {
       }
     }
 
-    const createOwnerOrg = await prisma.user.create({
-      data: {
-        username: slugify(adminUsername),
-        email: adminEmail,
-        emailVerified: new Date(),
-        password: hashedPassword,
-        // Default schedule
-        schedules: {
-          create: {
-            name: t("default_schedule_name"),
-            availability: {
-              createMany: {
-                data: availability.map((schedule) => ({
-                  days: schedule.days,
-                  startTime: schedule.startTime,
-                  endTime: schedule.endTime,
-                })),
+    const { user: createOwnerOrg, organization } = await prisma.$transaction(async (tx) => {
+      const organization = await tx.team.create({
+        data: {
+          name,
+          ...(!IS_TEAM_BILLING_ENABLED ? { slug } : {}),
+          metadata: {
+            ...(IS_TEAM_BILLING_ENABLED ? { requestedSlug: slug } : {}),
+            isOrganization: true,
+            isOrganizationVerified: true,
+            isOrganizationConfigured,
+            orgAutoAcceptEmail: emailDomain,
+          },
+        },
+      });
+
+      const user = await tx.user.create({
+        data: {
+          username: slugify(adminUsername),
+          email: adminEmail,
+          emailVerified: new Date(),
+          password: hashedPassword,
+          organizationId: organization.id,
+          // Default schedule
+          schedules: {
+            create: {
+              name: t("default_schedule_name"),
+              availability: {
+                createMany: {
+                  data: availability.map((schedule) => ({
+                    days: schedule.days,
+                    startTime: schedule.startTime,
+                    endTime: schedule.endTime,
+                  })),
+                },
               },
             },
           },
-        },
-        organization: {
-          create: {
-            name,
-            ...(!IS_TEAM_BILLING_ENABLED ? { slug } : {}),
-            metadata: {
-              ...(IS_TEAM_BILLING_ENABLED ? { requestedSlug: slug } : {}),
-              isOrganization: true,
-              isOrganizationVerified: false,
-              isOrganizationConfigured,
-              orgAutoAcceptEmail: emailDomain,
+          profiles: {
+            create: {
+              username: slugify(adminUsername),
+              organizationId: organization.id,
+              uid: ProfileRepository.generateProfileUid(),
             },
           },
         },
-      },
+      });
+
+      await tx.membership.create({
+        data: {
+          userId: user.id,
+          role: MembershipRole.OWNER,
+          accepted: true,
+          teamId: organization.id,
+        },
+      });
+      return { user, organization };
     });
 
-    if (!createOwnerOrg.organizationId) throw Error("User not created");
+    if (!organization.id) throw Error("User not created");
 
-    await prisma.membership.create({
-      data: {
-        userId: createOwnerOrg.id,
-        role: MembershipRole.OWNER,
-        accepted: true,
-        teamId: createOwnerOrg.organizationId,
-      },
-    });
-
-    return { user: { ...createOwnerOrg, password } };
+    return { user: { ...createOwnerOrg, organizationId: organization.id, password } };
   } else {
-    if (!IS_PRODUCTION) return { checked: true };
     const language = await getTranslation(input.language ?? "en", "common");
 
     const secret = createHash("md5")

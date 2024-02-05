@@ -268,7 +268,21 @@ function getTrpcHandlerData({
       user: {
         ...getSampleUserInSession(),
         ...user,
-      } satisfies TrpcSessionUser,
+        avatarUrl: user.avatarUrl || null,
+        profile: {
+          upId: "",
+          id: 1,
+          name: "",
+          avatarUrl: "",
+          startTime: 0,
+          endTime: 0,
+          username: user.username || "",
+          organizationId: null,
+          organization: null,
+          bufferTime: 5,
+          avatar: null,
+        },
+      } as unknown as NonNullable<TrpcSessionUser>,
     },
     input: input,
   };
