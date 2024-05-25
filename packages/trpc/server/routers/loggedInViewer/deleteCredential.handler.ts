@@ -10,6 +10,7 @@ import { deletePayment } from "@calcom/lib/payment/deletePayment";
 import { getTranslation } from "@calcom/lib/server/i18n";
 import { bookingMinimalSelect, prisma } from "@calcom/prisma";
 import { AppCategories, BookingStatus } from "@calcom/prisma/enums";
+import { withQueryContext } from "@calcom/prisma/extensions/audit-log-creator";
 import { credentialForCalendarServiceSelect } from "@calcom/prisma/selects/credential";
 import { EventTypeMetaDataSchema } from "@calcom/prisma/zod-utils";
 import type { TrpcSessionUser } from "@calcom/trpc/server/trpc";
@@ -119,14 +120,19 @@ export const deleteCredentialHandler = async ({ ctx, input }: DeleteCredentialOp
         return acc;
       }, []);
 
-      await prisma.eventType.update({
-        where: {
-          id: eventType.id,
-        },
-        data: {
-          locations: updatedLocations,
-        },
-      });
+      await prisma.eventType.update(
+        withQueryContext(
+          {
+            where: {
+              id: eventType.id,
+            },
+            data: {
+              locations: updatedLocations,
+            },
+          },
+          { actorUserId: user.id }
+        )
+      );
     }
 
     // If it's a calendar, remove the destination calendar from the event type
@@ -155,21 +161,26 @@ export const deleteCredentialHandler = async ({ ctx, input }: DeleteCredentialOp
       const appSlug = credential.app?.slug;
       if (appSlug) {
         await prisma.$transaction(async () => {
-          await prisma.eventType.update({
-            where: {
-              id: eventType.id,
-            },
-            data: {
-              hidden: true,
-              metadata: {
-                ...metadata,
-                apps: {
-                  ...metadata?.apps,
-                  [appSlug]: undefined,
+          await prisma.eventType.update(
+            withQueryContext(
+              {
+                where: {
+                  id: eventType.id,
+                },
+                data: {
+                  hidden: true,
+                  metadata: {
+                    ...metadata,
+                    apps: {
+                      ...metadata?.apps,
+                      [appSlug]: undefined,
+                    },
+                  },
                 },
               },
-            },
-          });
+              { actorUserId: user.id }
+            )
+          );
 
           // Assuming that all bookings under this eventType need to be paid
           const unpaidBookings = await prisma.booking.findMany({

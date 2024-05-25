@@ -3,6 +3,7 @@ import type { z } from "zod";
 import { getBookingFieldsWithSystemFields } from "@calcom/features/bookings/lib/getBookingFields";
 import { prisma } from "@calcom/prisma";
 import type { EventType } from "@calcom/prisma/client";
+import { withQueryContext } from "@calcom/prisma/extensions/audit-log-creator";
 import type { eventTypeBookingFields } from "@calcom/prisma/zod-utils";
 
 type Field = z.infer<typeof eventTypeBookingFields>[number];
@@ -91,14 +92,19 @@ export async function upsertBookingField(
       sources: [source],
     });
   }
-  await prisma.eventType.update({
-    where: {
-      id: eventTypeId,
-    },
-    data: {
-      bookingFields: newFields,
-    },
-  });
+  await prisma.eventType.update(
+    withQueryContext(
+      {
+        where: {
+          id: eventTypeId,
+        },
+        data: {
+          bookingFields: newFields,
+        },
+      },
+      { actorUserId: 0 }
+    )
+  );
 }
 
 export async function removeBookingField(
@@ -131,12 +137,17 @@ export async function removeBookingField(
     })
     .filter((f): f is Field => !!f);
 
-  await prisma.eventType.update({
-    where: {
-      id: eventTypeId,
-    },
-    data: {
-      bookingFields: newFields,
-    },
-  });
+  await prisma.eventType.update(
+    withQueryContext(
+      {
+        where: {
+          id: eventTypeId,
+        },
+        data: {
+          bookingFields: newFields,
+        },
+      },
+      { actorUserId: 0 }
+    )
+  );
 }

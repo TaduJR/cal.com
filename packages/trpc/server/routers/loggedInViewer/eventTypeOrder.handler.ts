@@ -1,4 +1,5 @@
 import { prisma } from "@calcom/prisma";
+import { withQueryContext } from "@calcom/prisma/extensions/audit-log-creator";
 import type { TrpcSessionUser } from "@calcom/trpc/server/trpc";
 
 import { TRPCError } from "@trpc/server";
@@ -54,14 +55,19 @@ export const eventTypeOrderHandler = async ({ ctx, input }: EventTypeOrderOption
   }
   await Promise.all(
     input.ids.reverse().map((id, position) => {
-      return prisma.eventType.update({
-        where: {
-          id,
-        },
-        data: {
-          position,
-        },
-      });
+      return prisma.eventType.update(
+        withQueryContext(
+          {
+            where: {
+              id,
+            },
+            data: {
+              position,
+            },
+          },
+          { actorUserId: user.id }
+        )
+      );
     })
   );
 };

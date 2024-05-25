@@ -2,6 +2,7 @@ import type { Prisma } from "@prisma/client";
 import { PrismaClient as PrismaClientWithoutExtension } from "@prisma/client";
 import { withAccelerate } from "@prisma/extension-accelerate";
 
+import { auditLogCustomMethodClientExtension } from "./extensions/audit-log-creator";
 import { bookingIdempotencyKeyExtension } from "./extensions/booking-idempotency-key";
 import { excludePendingPaymentsExtension } from "./extensions/exclude-pending-payment-teams";
 import { bookingReferenceMiddleware } from "./middleware";
@@ -21,6 +22,7 @@ const prismaWithoutClientExtensions =
 
 export const customPrisma = (options?: Prisma.PrismaClientOptions) =>
   new PrismaClientWithoutExtension({ ...prismaOptions, ...options })
+    .$extends(auditLogCustomMethodClientExtension())
     .$extends(excludePendingPaymentsExtension())
     .$extends(bookingIdempotencyKeyExtension())
     .$extends(withAccelerate());
@@ -32,6 +34,7 @@ bookingReferenceMiddleware(prismaWithoutClientExtensions);
 // FIXME: Due to some reason, there are types failing in certain places due to the $extends. Fix it and then enable it
 // Specifically we get errors like `Type 'string | Date | null | undefined' is not assignable to type 'Exact<string | Date | null | undefined, string | Date | null | undefined>'`
 const prismaWithClientExtensions = prismaWithoutClientExtensions
+  .$extends(auditLogCustomMethodClientExtension())
   .$extends(excludePendingPaymentsExtension())
   .$extends(bookingIdempotencyKeyExtension())
   .$extends(withAccelerate());

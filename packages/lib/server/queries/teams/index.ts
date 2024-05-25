@@ -4,6 +4,7 @@ import { getAppFromSlug } from "@calcom/app-store/utils";
 import prisma, { baseEventTypeSelect } from "@calcom/prisma";
 import type { Team } from "@calcom/prisma/client";
 import { SchedulingType } from "@calcom/prisma/enums";
+import { withQueryContext } from "@calcom/prisma/extensions/audit-log-creator";
 import { _EventTypeModel } from "@calcom/prisma/zod";
 import {
   EventTypeMetaDataSchema,
@@ -327,34 +328,45 @@ export async function updateNewTeamMemberEventTypes(userId: number, teamId: numb
           // Calculate if there are new workflows for which assigned members will get too
           const currentWorkflowIds = eventType.workflows?.map((wf) => wf.workflowId);
 
-          return prisma.eventType.create({
-            data: {
-              ...managedEventTypeValues,
-              ...unlockedEventTypeValues,
-              bookingLimits:
-                (managedEventTypeValues.bookingLimits as unknown as Prisma.InputJsonObject) ?? undefined,
-              recurringEvent:
-                (managedEventTypeValues.recurringEvent as unknown as Prisma.InputJsonValue) ?? undefined,
-              metadata: (managedEventTypeValues.metadata as Prisma.InputJsonValue) ?? undefined,
-              bookingFields: (managedEventTypeValues.bookingFields as Prisma.InputJsonValue) ?? undefined,
-              durationLimits: (managedEventTypeValues.durationLimits as Prisma.InputJsonValue) ?? undefined,
-              onlyShowFirstAvailableSlot: managedEventTypeValues.onlyShowFirstAvailableSlot ?? false,
-              userId,
-              users: {
-                connect: [{ id: userId }],
+          return prisma.eventType.create(
+            withQueryContext(
+              {
+                data: {
+                  ...managedEventTypeValues,
+                  ...unlockedEventTypeValues,
+                  bookingLimits:
+                    (managedEventTypeValues.bookingLimits as unknown as Prisma.InputJsonObject) ?? undefined,
+                  recurringEvent:
+                    (managedEventTypeValues.recurringEvent as unknown as Prisma.InputJsonValue) ?? undefined,
+                  metadata: (managedEventTypeValues.metadata as Prisma.InputJsonValue) ?? undefined,
+                  bookingFields: (managedEventTypeValues.bookingFields as Prisma.InputJsonValue) ?? undefined,
+                  durationLimits:
+                    (managedEventTypeValues.durationLimits as Prisma.InputJsonValue) ?? undefined,
+                  onlyShowFirstAvailableSlot: managedEventTypeValues.onlyShowFirstAvailableSlot ?? false,
+                  userId,
+                  users: {
+                    connect: [{ id: userId }],
+                  },
+                  parentId: eventType.parentId,
+                  hidden: false,
+                  workflows: currentWorkflowIds && {
+                    create: currentWorkflowIds.map((wfId) => ({ workflowId: wfId })),
+                  },
+                },
               },
-              parentId: eventType.parentId,
-              hidden: false,
-              workflows: currentWorkflowIds && {
-                create: currentWorkflowIds.map((wfId) => ({ workflowId: wfId })),
-              },
-            },
-          });
+              { actorUserId: userId }
+            )
+          );
         } else {
-          return prisma.eventType.update({
-            where: { id: eventType.id },
-            data: { hosts: { create: [{ userId, isFixed: eventType.schedulingType === "COLLECTIVE" }] } },
-          });
+          return prisma.eventType.update(
+            withQueryContext(
+              {
+                where: { id: eventType.id },
+                data: { hosts: { create: [{ userId, isFixed: eventType.schedulingType === "COLLECTIVE" }] } },
+              },
+              { actorUserId: userId }
+            )
+          );
         }
       })
     ));

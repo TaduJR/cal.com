@@ -6,6 +6,7 @@ import { HttpError } from "@calcom/lib/http-error";
 import { defaultResponder } from "@calcom/lib/server";
 import prisma from "@calcom/prisma";
 import { SchedulingType } from "@calcom/prisma/enums";
+import { withQueryContext } from "@calcom/prisma/extensions/audit-log-creator";
 
 import type { schemaEventTypeBaseBodyParams } from "~/lib/validations/event-type";
 import { schemaEventTypeEditBodyParams, schemaEventTypeReadPublic } from "~/lib/validations/event-type";
@@ -204,7 +205,7 @@ import checkTeamEventEditPermission from "../_utils/checkTeamEventEditPermission
  *        description: Authorization information is missing or invalid.
  */
 export async function patchHandler(req: NextApiRequest) {
-  const { query, body } = req;
+  const { userId, query, body } = req;
   const { id } = schemaQueryIdParseInt.parse(query);
   const {
     hosts = [],
@@ -232,7 +233,9 @@ export async function patchHandler(req: NextApiRequest) {
     };
   }
   await checkPermissions(req, parsedBody);
-  const eventType = await prisma.eventType.update({ where: { id }, data });
+  const eventType = await prisma.eventType.update(
+    withQueryContext({ where: { id }, data }, { actorUserId: userId })
+  );
   return { event_type: schemaEventTypeReadPublic.parse(eventType) };
 }
 

@@ -7,6 +7,7 @@ import { generateHashedLink } from "@calcom/lib/generateHashedLink";
 import { getTranslation } from "@calcom/lib/server/i18n";
 import type { PrismaClient } from "@calcom/prisma";
 import { SchedulingType } from "@calcom/prisma/enums";
+import { withQueryContext } from "@calcom/prisma/extensions/audit-log-creator";
 import { _EventTypeModel } from "@calcom/prisma/zod";
 import { allManagedEventTypeProps, unlockedManagedEventTypeProps } from "@calcom/prisma/zod-utils";
 
@@ -173,38 +174,43 @@ export default async function handleChildrenEventTypes({
     // Create event types for new users added
     await prisma.$transaction(
       newUserIds.map((userId) => {
-        return prisma.eventType.create({
-          data: {
-            profileId: profileId ?? null,
-            ...managedEventTypeValues,
-            ...unlockedEventTypeValues,
-            bookingLimits:
-              (managedEventTypeValues.bookingLimits as unknown as Prisma.InputJsonObject) ?? undefined,
-            recurringEvent:
-              (managedEventTypeValues.recurringEvent as unknown as Prisma.InputJsonValue) ?? undefined,
-            metadata: (managedEventTypeValues.metadata as Prisma.InputJsonValue) ?? undefined,
-            bookingFields: (managedEventTypeValues.bookingFields as Prisma.InputJsonValue) ?? undefined,
-            durationLimits: (managedEventTypeValues.durationLimits as Prisma.InputJsonValue) ?? undefined,
-            onlyShowFirstAvailableSlot: managedEventTypeValues.onlyShowFirstAvailableSlot ?? false,
-            userId,
-            users: {
-              connect: [{ id: userId }],
-            },
-            parentId,
-            hidden: children?.find((ch) => ch.owner.id === userId)?.hidden ?? false,
-            workflows: currentWorkflowIds && {
-              create: currentWorkflowIds.map((wfId) => ({ workflowId: wfId })),
-            },
-            // Reserved for future releases
-            /*
+        return prisma.eventType.create(
+          withQueryContext(
+            {
+              data: {
+                profileId: profileId ?? null,
+                ...managedEventTypeValues,
+                ...unlockedEventTypeValues,
+                bookingLimits:
+                  (managedEventTypeValues.bookingLimits as unknown as Prisma.InputJsonObject) ?? undefined,
+                recurringEvent:
+                  (managedEventTypeValues.recurringEvent as unknown as Prisma.InputJsonValue) ?? undefined,
+                metadata: (managedEventTypeValues.metadata as Prisma.InputJsonValue) ?? undefined,
+                bookingFields: (managedEventTypeValues.bookingFields as Prisma.InputJsonValue) ?? undefined,
+                durationLimits: (managedEventTypeValues.durationLimits as Prisma.InputJsonValue) ?? undefined,
+                onlyShowFirstAvailableSlot: managedEventTypeValues.onlyShowFirstAvailableSlot ?? false,
+                userId,
+                users: {
+                  connect: [{ id: userId }],
+                },
+                parentId,
+                hidden: children?.find((ch) => ch.owner.id === userId)?.hidden ?? false,
+                workflows: currentWorkflowIds && {
+                  create: currentWorkflowIds.map((wfId) => ({ workflowId: wfId })),
+                },
+                // Reserved for future releases
+                /*
             webhooks: eventType.webhooks && {
               createMany: {
                 data: eventType.webhooks?.map((wh) => ({ ...wh, eventTypeId: undefined })),
               },
             },*/
-            hashedLink: hashedLinkQuery(userId),
-          },
-        });
+                hashedLink: hashedLinkQuery(userId),
+              },
+            },
+            { actorUserId: userId }
+          )
+        );
       })
     );
   }
@@ -245,18 +251,23 @@ export default async function handleChildrenEventTypes({
     // Update event types for old users
     const oldEventTypes = await prisma.$transaction(
       oldUserIds.map((userId) => {
-        return prisma.eventType.update({
-          where: {
-            userId_parentId: {
-              userId,
-              parentId,
+        return prisma.eventType.update(
+          withQueryContext(
+            {
+              where: {
+                userId_parentId: {
+                  userId,
+                  parentId,
+                },
+              },
+              data: {
+                ...updatePayloadFiltered,
+                hashedLink: "hashedLink" in unlockedFieldProps ? undefined : hashedLinkQuery(userId),
+              },
             },
-          },
-          data: {
-            ...updatePayloadFiltered,
-            hashedLink: "hashedLink" in unlockedFieldProps ? undefined : hashedLinkQuery(userId),
-          },
-        });
+            { actorUserId: userId }
+          )
+        );
       })
     );
 

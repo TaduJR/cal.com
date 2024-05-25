@@ -1,4 +1,5 @@
 import { prisma } from "@calcom/prisma";
+import { withQueryContext } from "@calcom/prisma/extensions/audit-log-creator";
 
 import { TRPCError } from "@trpc/server";
 
@@ -26,15 +27,20 @@ export const bulkUpdateToDefaultAvailabilityHandler = async ({
     });
   }
 
-  return await prisma.eventType.updateMany({
-    where: {
-      id: {
-        in: eventTypeIds,
+  return await prisma.eventType.updateMany(
+    withQueryContext(
+      {
+        where: {
+          id: {
+            in: eventTypeIds,
+          },
+          userId: ctx.user.id,
+        },
+        data: {
+          scheduleId: defaultScheduleId,
+        },
       },
-      userId: ctx.user.id,
-    },
-    data: {
-      scheduleId: defaultScheduleId,
-    },
-  });
+      { actorUserId: ctx.user.id }
+    )
+  );
 };

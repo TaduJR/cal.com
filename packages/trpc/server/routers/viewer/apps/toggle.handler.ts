@@ -3,6 +3,7 @@ import { sendDisabledAppEmail } from "@calcom/emails";
 import { getTranslation } from "@calcom/lib/server";
 import type { PrismaClient } from "@calcom/prisma";
 import { AppCategories } from "@calcom/prisma/enums";
+import { withQueryContext } from "@calcom/prisma/extensions/audit-log-creator";
 
 import { TRPCError } from "@trpc/server";
 
@@ -122,25 +123,30 @@ export const toggleHandler = async ({ input, ctx }: ToggleOptions) => {
         eventTypesWithApp.map(async (eventType) => {
           // TODO: This update query can be removed by merging it with
           // the previous `findMany` query, if that query returns certain values.
-          await prisma.eventType.update({
-            where: {
-              id: eventType.id,
-            },
-            data: {
-              metadata: {
-                ...(eventType.metadata as object),
-                apps: {
-                  // From this comment we can not type JSON fields in Prisma https://github.com/prisma/prisma/issues/3219#issuecomment-670202980
-                  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-                  //@ts-ignore
-                  ...eventType.metadata?.apps,
-                  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-                  //@ts-ignore
-                  [app.slug]: { ...eventType.metadata?.apps[app.slug], enabled: false },
+          await prisma.eventType.update(
+            withQueryContext(
+              {
+                where: {
+                  id: eventType.id,
+                },
+                data: {
+                  metadata: {
+                    ...(eventType.metadata as object),
+                    apps: {
+                      // From this comment we can not type JSON fields in Prisma https://github.com/prisma/prisma/issues/3219#issuecomment-670202980
+                      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+                      //@ts-ignore
+                      ...eventType.metadata?.apps,
+                      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+                      //@ts-ignore
+                      [app.slug]: { ...eventType.metadata?.apps[app.slug], enabled: false },
+                    },
+                  },
                 },
               },
-            },
-          });
+              { actorUserId: ctx.user.id }
+            )
+          );
 
           return Promise.all(
             eventType.users.map(async (user) => {

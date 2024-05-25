@@ -5,6 +5,7 @@ import { HttpError } from "@calcom/lib/http-error";
 import { defaultResponder } from "@calcom/lib/server";
 import prisma from "@calcom/prisma";
 import { MembershipRole } from "@calcom/prisma/client";
+import { withQueryContext } from "@calcom/prisma/extensions/audit-log-creator";
 
 import { schemaEventTypeCreateBodyParams, schemaEventTypeReadPublic } from "~/lib/validations/event-type";
 import { canUserAccessTeamWithRole } from "~/pages/api/teams/[teamId]/_auth-middleware";
@@ -302,7 +303,9 @@ async function postHandler(req: NextApiRequest) {
     data.hosts = { createMany: { data: hosts } };
   }
 
-  const eventType = await prisma.eventType.create({ data, include: { hosts: true } });
+  const eventType = await prisma.eventType.create(
+    withQueryContext({ data, include: { hosts: true } }, { actorUserId: userId })
+  );
 
   return {
     event_type: schemaEventTypeReadPublic.parse(eventType),
