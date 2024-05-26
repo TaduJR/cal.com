@@ -140,6 +140,9 @@ model EventType {
   secondaryEmailId Int?
   secondaryEmail   SecondaryEmail? @relation(fields: [secondaryEmailId], references: [id], onDelete: Cascade)
 
+  //This is used to pass session dependent the actorUserId for AuditLogger Client Extension. It is always null.
+  actorUserId Int?
+
   @@unique([userId, slug])
   @@unique([teamId, slug])
   @@unique([userId, parentId])
@@ -576,6 +579,8 @@ model Booking {
   ratingFeedback        String?
   noShowHost            Boolean?
   scheduledTriggers     WebhookScheduledTriggers[]
+  //This is used to pass session dependent the actorUserId for AuditLogger Client Extension. It is always null.
+  actorUserId           Int?
 
   @@index([eventTypeId])
   @@index([userId])
@@ -1403,13 +1408,23 @@ enum CRUD {
   DELETE
 }
 
+enum ActionType {
+  EventTypeCreate
+  EventTypeUpdate
+  EventTypeDelete
+  BookingCreate
+  BookingUpdate
+  BookingDelete
+}
+
 model AuditLog {
-  id           Int      @id @default(autoincrement())
-  actionType   String
-  actorUserId  Int
-  target       Json?
-  crud         CRUD
-  createdAt    DateTime @default(now())
-  team         Team     @relation(fields: [targetTeamId], references: [id], onDelete: Cascade)
-  targetTeamId Int
+  id                      Int        @id @default(autoincrement())
+  actionType              ActionType
+  actorUserId             Int?
+  target                  Json?
+  crud                    CRUD
+  createdAt               DateTime   @default(now())
+  legacyActorUserFullName String?
+  team                    Team       @relation(fields: [targetTeamId], references: [id], onDelete: Cascade)
+  targetTeamId            Int
 }

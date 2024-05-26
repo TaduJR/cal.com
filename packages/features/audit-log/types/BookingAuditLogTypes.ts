@@ -1,55 +1,50 @@
 import type { Prisma } from "@calcom/prisma/client";
+import type { CRUD } from "@calcom/prisma/client";
 
-export const CRUD = {
-  CREATE: "CREATE",
-  READ: "READ",
-  UPDATE: "UPDATE",
-  DELETE: "DELETE",
+export const BookingAuditLogOption = {
+  BookingCreate: "BookingCreate",
+  BookingUpdate: "BookingUpdate",
+  BookingDelete: "BookingDelete",
 } as const;
-export type CRUD = (typeof CRUD)[keyof typeof CRUD];
 
-export enum BookingAuditLogOption {
-  BookingCreate = "booking.create",
-  BookingUpdate = "booking.update",
-  BookingDelete = "booking.delete",
-}
-
+export type BookingAuditLogOption = (typeof BookingAuditLogOption)[keyof typeof BookingAuditLogOption];
 export interface IBookingCreateLog {
-  actionType: BookingAuditLogOption.BookingCreate;
+  actionType: typeof BookingAuditLogOption.BookingCreate;
   actorUserId: number;
   target: {
-    targetEventId: number;
-    targetUserId?: number;
+    targetEvent: number | string;
+    targetUser: number | string;
   };
-  crud: CRUD.CREATE;
+  crud: typeof CRUD.CREATE;
   targetTeamId: number;
 }
 
 export interface IBookingUpdateLog {
-  actionType: BookingAuditLogOption.BookingUpdate;
+  actionType: typeof BookingAuditLogOption.BookingUpdate;
   actorUserId: number;
   target: {
-    targetEventId: number;
-    targetUserId?: number;
+    targetEvent: number | string;
+    targetUser?: number | string;
     changedAttribute?: {
       [propName: string]: unknown;
     };
   };
-  crud: CRUD.UPDATE;
+  crud: typeof CRUD.UPDATE;
   targetTeamId: number;
 }
 
 export interface IBookingDeleteLog {
-  actionType: BookingAuditLogOption.BookingDelete;
+  actionType: typeof BookingAuditLogOption.BookingDelete;
   actorUserId: number;
   target: {
-    targetEventId: number;
+    targetEvent: number | string;
     targetBooking: {
       startTime: Date;
       endTime: Date;
     };
+    targetUser: number | string;
   };
-  crud: CRUD.DELETE;
+  crud: typeof CRUD.DELETE;
   targetTeamId: number;
 }
 

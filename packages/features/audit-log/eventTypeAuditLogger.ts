@@ -2,13 +2,14 @@
 import { prisma } from "@calcom/prisma";
 import type { EventType } from "@calcom/prisma/client";
 
+import { CRUD } from "./types/CRUD";
 import type {
   IEventTypeCreateLog,
   IEventTypeUpdateLog,
   IEventTypeDeleteLog,
   IEventTypeLog,
 } from "./types/EventTypeAuditLogTypes";
-import { EventTypeAuditLogOption, CRUD } from "./types/EventTypeAuditLogTypes";
+import { EventTypeAuditLogOption } from "./types/EventTypeAuditLogTypes";
 import deepDifference from "./util/deepDifference";
 
 abstract class EventTypeAuditLogger {
@@ -21,12 +22,11 @@ abstract class EventTypeAuditLogger {
   protected readonly targetEventType: EventType = {} as EventType;
 
   constructor(actorUserId: number, targetEventType: EventType) {
-    if (targetEventType.id && targetEventType.teamId) {
-      this.actorUserId = actorUserId;
-      this.targetEventId = targetEventType.id;
-      this.targetTeamId = targetEventType.teamId;
-      this.targetEventType = targetEventType;
-    } else return this;
+    if (!targetEventType.id || !targetEventType.teamId) return this;
+    this.actorUserId = actorUserId;
+    this.targetEventId = targetEventType.id;
+    this.targetTeamId = targetEventType.teamId;
+    this.targetEventType = targetEventType;
   }
 
   async log() {
@@ -38,7 +38,7 @@ abstract class EventTypeAuditLogger {
 }
 
 export class EventTypeCreateAuditLogger extends EventTypeAuditLogger {
-  actionType: EventTypeAuditLogOption.EventTypeCreate;
+  actionType: typeof EventTypeAuditLogOption.EventTypeCreate;
   eventTypeAuditData: IEventTypeCreateLog[];
 
   constructor(actorUserId: number, targetEventType: EventType) {
@@ -61,7 +61,7 @@ export class EventTypeCreateAuditLogger extends EventTypeAuditLogger {
         actionType: this.actionType,
         actorUserId,
         target: {
-          targetEventId,
+          targetEvent: targetEventId,
         },
         crud: CRUD.CREATE,
         targetTeamId,
@@ -71,9 +71,9 @@ export class EventTypeCreateAuditLogger extends EventTypeAuditLogger {
 }
 
 export class EventTypeUpdateAuditLogger extends EventTypeAuditLogger {
-  actionType: EventTypeAuditLogOption.EventTypeUpdate;
+  actionType: typeof EventTypeAuditLogOption.EventTypeUpdate;
   eventTypeAuditData: IEventTypeUpdateLog[];
-  private readonly requiredEventTypeChanged = ["title", "duration", "locations"];
+  private readonly requiredEventTypeChanged = ["title", "length", "locations"];
   private readonly prevEventType: EventType;
 
   constructor(actorUserId: number, prevEventType: EventType, targetEventType: EventType) {
@@ -106,7 +106,7 @@ export class EventTypeUpdateAuditLogger extends EventTypeAuditLogger {
           actionType: this.actionType,
           actorUserId,
           target: {
-            targetEventId,
+            targetEvent: targetEventId,
             changedAttribute: {
               [key]: targetEventType[key],
             },
@@ -122,30 +122,22 @@ export class EventTypeUpdateAuditLogger extends EventTypeAuditLogger {
 }
 
 export class EventTypeDeleteAuditLogger extends EventTypeAuditLogger {
-  actionType: EventTypeAuditLogOption.EventTypeDelete;
+  actionType: typeof EventTypeAuditLogOption.EventTypeDelete;
   eventTypeAuditData: IEventTypeDeleteLog[];
 
   constructor(actorUserId: number, targetEventType: EventType) {
     super(actorUserId, targetEventType);
     this.actionType = EventTypeAuditLogOption.EventTypeDelete;
-    this.eventTypeAuditData = this.eventTypeCreateDataMaker(
-      this.actorUserId,
-      this.targetEventId,
-      this.targetTeamId
-    );
+    this.eventTypeAuditData = this.eventTypeDeleteDataMaker(this.actorUserId, this.targetTeamId);
   }
 
-  private eventTypeCreateDataMaker(
-    actorUserId: number,
-    targetEventId: number,
-    targetTeamId: number
-  ): IEventTypeDeleteLog[] {
+  private eventTypeDeleteDataMaker(actorUserId: number, targetTeamId: number): IEventTypeDeleteLog[] {
     return [
       {
         actionType: this.actionType,
         actorUserId,
         target: {
-          targetEventId,
+          targetEvent: this.targetEventType.title,
         },
         crud: CRUD.DELETE,
         targetTeamId,

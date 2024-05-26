@@ -6,7 +6,6 @@ import { Injectable } from "@nestjs/common";
 
 import { getEventTypeById } from "@calcom/platform-libraries";
 import type { PrismaClient } from "@calcom/prisma";
-import { withQueryContext } from "@calcom/prisma/extensions/audit-log-creator";
 
 @Injectable()
 export class EventTypesRepository {
@@ -16,18 +15,14 @@ export class EventTypesRepository {
     userId: number,
     body: Pick<CreateEventTypeInput, "title" | "slug" | "length" | "hidden">
   ) {
-    return this.dbWrite.prisma.eventType.create(
-      withQueryContext(
-        {
-          data: {
-            ...body,
-            userId,
-            users: { connect: { id: userId } },
-          },
-        },
-        { actorUserId: userId }
-      )
-    );
+    return this.dbWrite.prisma.eventType.create({
+      data: {
+        ...body,
+        userId,
+        users: { connect: { id: userId } },
+        actorUserId: userId,
+      },
+    });
   }
 
   async getEventTypeWithSeats(eventTypeId: number) {
@@ -76,7 +71,7 @@ export class EventTypesRepository {
     });
   }
 
-  async deleteEventType(eventTypeId: number) {
-    return this.dbWrite.prisma.eventType.delete({ where: { id: eventTypeId } });
+  async deleteEventType(eventTypeId: number, actorUserId?: number) {
+    return this.dbWrite.prisma.eventType.delete({ where: { id: eventTypeId, actorUserId } });
   }
 }

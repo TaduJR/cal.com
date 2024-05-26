@@ -1,7 +1,8 @@
 // eslint-disable-next-line no-restricted-imports
 import { differenceWith, isEqual } from "lodash";
 
-import type { Booking } from "@calcom/prisma/client";
+import { prisma } from "@calcom/prisma";
+import { BookingStatus, type Attendee } from "@calcom/prisma/client";
 
 import type {
   BookingWithAttendees,
@@ -10,37 +11,47 @@ import type {
   IBookingLog,
   IBookingUpdateLog,
 } from "./types/BookingAuditLogTypes";
-import { BookingAuditLogOption, CRUD } from "./types/BookingAuditLogTypes";
+import { BookingAuditLogOption } from "./types/BookingAuditLogTypes";
+import { CRUD } from "./types/CRUD";
 import deepDifference from "./util/deepDifference";
 
 abstract class BookingAuditLogger {
   abstract readonly bookingAuditData: IBookingLog[];
   abstract readonly actionType: BookingAuditLogOption;
 
-  constructor(
-    protected actorUserId: number,
-    protected targetEventId: number,
-    protected targetTeamId: number
-  ) {}
+  protected actorUserId = 0;
+  protected targetEventId = 0;
+  protected targetTeamId = 0;
+  protected targetBookingId = 0;
+  protected targetBookingWithAttendees: BookingWithAttendees = {} as BookingWithAttendees;
+
+  constructor(actorUserId: number, targetBookingWithAttendees: BookingWithAttendees, targetTeamId: number) {
+    if (!targetBookingWithAttendees.eventTypeId || !targetTeamId) return this;
+    this.actorUserId = actorUserId;
+    this.targetEventId = targetBookingWithAttendees.eventTypeId;
+    this.targetTeamId = targetTeamId;
+    this.targetBookingWithAttendees = targetBookingWithAttendees;
+  }
 
   async log() {
-    // await prisma.auditLog.createMany({
-    //   data: this.eventTypeAuditData,
-    // });
+    if (!this.bookingAuditData?.length) return;
+    await prisma.auditLog.createMany({
+      data: this.bookingAuditData,
+    });
   }
 }
 
 export class BookingCreateAuditLogger extends BookingAuditLogger {
-  actionType: BookingAuditLogOption.BookingCreate;
-  bookingAuditData: IBookingCreateLog[];
+  actionType: typeof BookingAuditLogOption.BookingCreate = BookingAuditLogOption.BookingCreate;
+  bookingAuditData: IBookingCreateLog[] = [];
 
-  constructor(actorUserId: number, targetEventId: number, targetUserId: number, targetTeamId: number) {
-    super(actorUserId, targetEventId, targetTeamId);
-    this.actionType = BookingAuditLogOption.BookingCreate;
+  constructor(actorUserId: number, targetBookingWithAttendees: BookingWithAttendees, targetTeamId: number) {
+    super(actorUserId, targetBookingWithAttendees, targetTeamId);
+    if (targetBookingWithAttendees.status !== BookingStatus.ACCEPTED) return this;
     this.bookingAuditData = this.bookingCreateDataMaker(
       actorUserId,
-      targetEventId,
-      targetUserId,
+      this.targetEventId,
+      targetBookingWithAttendees.attendees,
       targetTeamId
     );
   }
@@ -48,41 +59,42 @@ export class BookingCreateAuditLogger extends BookingAuditLogger {
   private bookingCreateDataMaker(
     actorUserId: number,
     targetEventId: number,
-    targetUserId: number,
+    targetAttendees: Attendee[],
     targetTeamId: number
   ): IBookingCreateLog[] {
-    return [
-      {
+    const bookedAttendeesIds = targetAttendees.map((attendee) => attendee.id);
+    const data: IBookingCreateLog[] = [];
+    for (const attendeeId of bookedAttendeesIds) {
+      data.push({
         actionType: this.actionType,
         actorUserId,
         target: {
-          targetEventId,
-          ...(actorUserId !== targetUserId ? { targetUserId } : {}),
+          targetEvent: targetEventId,
+          targetUser: attendeeId,
         },
         crud: CRUD.CREATE,
         targetTeamId,
-      },
-    ];
+      });
+    }
+    return data;
   }
 }
 
 export class BookingUpdateAuditLogger extends BookingAuditLogger {
   private readonly requiredEventTypeChanged = ["status", "location", "startTime", "endTime", "attendees"];
-  actionType: BookingAuditLogOption.BookingUpdate;
+  actionType: typeof BookingAuditLogOption.BookingUpdate;
   bookingAuditData: IBookingUpdateLog[];
 
   constructor(
     actorUserId: number,
-    targetEventId: number,
-    targetTeamId: number,
     private readonly prevBookingWithAttendees: BookingWithAttendees,
-    private readonly updatedBookingWithAttendees: BookingWithAttendees
+    private readonly updatedBookingWithAttendees: BookingWithAttendees,
+    targetTeamId: number
   ) {
-    super(actorUserId, targetEventId, targetTeamId);
+    super(actorUserId, updatedBookingWithAttendees, targetTeamId);
     this.actionType = BookingAuditLogOption.BookingUpdate;
     this.bookingAuditData = this.bookingUpdateDataMaker(
       actorUserId,
-      targetEventId,
       targetTeamId,
       this.prevBookingWithAttendees,
       this.updatedBookingWithAttendees
@@ -91,7 +103,6 @@ export class BookingUpdateAuditLogger extends BookingAuditLogger {
 
   private bookingUpdateDataMaker(
     actorUserId: number,
-    targetEventId: number,
     targetTeamId: number,
     prevBookingWithAttendees: BookingWithAttendees,
     updatedBookingWithAttendees: BookingWithAttendees
@@ -120,7 +131,7 @@ export class BookingUpdateAuditLogger extends BookingAuditLogger {
           actionType: this.actionType,
           actorUserId,
           target: {
-            targetEventId,
+            targetEvent: this.targetEventId,
             changedAttribute: {
               ...(key === "attendees"
                 ? { attendees: { created: { newAttendeesEmails }, deleted: { removedAttendeesEmails } } }
@@ -138,45 +149,42 @@ export class BookingUpdateAuditLogger extends BookingAuditLogger {
 }
 
 export class BookingDeleteAuditLogger extends BookingAuditLogger {
-  actionType: BookingAuditLogOption.BookingDelete;
+  actionType: typeof BookingAuditLogOption.BookingDelete;
   bookingAuditData: IBookingDeleteLog[];
 
-  constructor(
-    actorUserId: number,
-    targetEventId: number,
-    targetTeamId: number,
-    private readonly targetBooking: Booking
-  ) {
-    super(actorUserId, targetEventId, targetTeamId);
+  constructor(actorUserId: number, targetBookingWithAttendees: BookingWithAttendees, targetTeamId: number) {
+    super(actorUserId, targetBookingWithAttendees, targetTeamId);
     this.actionType = BookingAuditLogOption.BookingDelete;
     this.bookingAuditData = this.bookingDeleteDataMaker(
       actorUserId,
-      targetEventId,
-      targetTeamId,
-      this.targetBooking
+      this.targetBookingWithAttendees,
+      targetTeamId
     );
   }
 
   private bookingDeleteDataMaker(
     actorUserId: number,
-    targetEventId: number,
-    targetTeamId: number,
-    targetBooking: Booking
+    targetBooking: BookingWithAttendees,
+    targetTeamId: number
   ): IBookingDeleteLog[] {
-    return [
-      {
+    const data: IBookingDeleteLog[] = [];
+    for (const attendee of targetBooking.attendees) {
+      data.push({
         actionType: this.actionType,
         actorUserId,
         target: {
-          targetEventId,
           targetBooking: {
             startTime: targetBooking.startTime,
             endTime: targetBooking.endTime,
           },
+          targetEvent: targetBooking.eventTypeId!,
+          targetUser: attendee.id,
         },
         crud: CRUD.DELETE,
         targetTeamId,
-      },
-    ];
+      });
+    }
+
+    return data;
   }
 }

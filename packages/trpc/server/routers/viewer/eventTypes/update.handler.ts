@@ -10,7 +10,6 @@ import { validateBookerLayouts } from "@calcom/lib/validateBookerLayouts";
 import type { PrismaClient } from "@calcom/prisma";
 import { WorkflowActions, WorkflowTriggerEvents } from "@calcom/prisma/client";
 import { SchedulingType } from "@calcom/prisma/enums";
-import { withQueryContext } from "@calcom/prisma/extensions/audit-log-creator";
 
 import { TRPCError } from "@trpc/server";
 
@@ -401,16 +400,11 @@ export const updateHandler = async ({ ctx, input }: UpdateOptions) => {
   });
   let updatedEventType: Prisma.EventTypeGetPayload<{ select: typeof updatedEventTypeSelect }>;
   try {
-    updatedEventType = await ctx.prisma.eventType.update(
-      withQueryContext(
-        {
-          where: { id },
-          data,
-          select: updatedEventTypeSelect,
-        },
-        { actorUserId: userId }
-      )
-    );
+    updatedEventType = await ctx.prisma.eventType.update({
+      where: { id },
+      data: { ...data, actorUserId: ctx.user.id },
+      select: updatedEventTypeSelect,
+    });
   } catch (e) {
     if (e instanceof Prisma.PrismaClientKnownRequestError) {
       if (e.code === "P2002") {

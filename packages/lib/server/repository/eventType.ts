@@ -3,7 +3,6 @@ import { Prisma } from "@prisma/client";
 
 import logger from "@calcom/lib/logger";
 import { prisma } from "@calcom/prisma";
-import { withQueryContext } from "@calcom/prisma/extensions/audit-log-creator";
 import type { Ensure } from "@calcom/types/utils";
 
 import { safeStringify } from "../../safeStringify";
@@ -33,7 +32,7 @@ const userSelect = Prisma.validator<Prisma.UserSelect>()({
 });
 
 export class EventTypeRepository {
-  static async create(data: IEventType, actorUserId: number | undefined) {
+  static async create(data: IEventType, actorUserId?: number | undefined) {
     const {
       userId,
       profileId,
@@ -48,50 +47,46 @@ export class EventTypeRepository {
       ...rest
     } = data;
 
-    return await prisma.eventType.create(
-      withQueryContext(
-        {
-          data: {
-            ...rest,
-            ...(userId ? { owner: { connect: { id: userId } } } : null),
-            ...(profileId
-              ? {
-                  profile: {
-                    connect: {
-                      id: profileId,
-                    },
-                  },
-                }
-              : null),
-            ...(teamId ? { team: { connect: { id: teamId } } } : null),
-            ...(parentId ? { parent: { connect: { id: parentId } } } : null),
-            ...(scheduleId ? { schedule: { connect: { id: scheduleId } } } : null),
-            ...(metadata ? { metadata: metadata } : null),
-            ...(bookingLimits
-              ? {
-                  bookingLimits,
-                }
-              : null),
-            ...(recurringEvent
-              ? {
-                  recurringEvent,
-                }
-              : null),
-            ...(bookingFields
-              ? {
-                  bookingFields,
-                }
-              : null),
-            ...(durationLimits
-              ? {
-                  durationLimits,
-                }
-              : null),
-          },
-        },
-        { actorUserId }
-      )
-    );
+    return await prisma.eventType.create({
+      data: {
+        ...rest,
+        ...(userId ? { owner: { connect: { id: userId } } } : null),
+        ...(profileId
+          ? {
+              profile: {
+                connect: {
+                  id: profileId,
+                },
+              },
+            }
+          : null),
+        ...(teamId ? { team: { connect: { id: teamId } } } : null),
+        ...(parentId ? { parent: { connect: { id: parentId } } } : null),
+        ...(scheduleId ? { schedule: { connect: { id: scheduleId } } } : null),
+        ...(metadata ? { metadata: metadata } : null),
+        ...(bookingLimits
+          ? {
+              bookingLimits,
+            }
+          : null),
+        ...(recurringEvent
+          ? {
+              recurringEvent,
+            }
+          : null),
+        ...(bookingFields
+          ? {
+              bookingFields,
+            }
+          : null),
+        ...(durationLimits
+          ? {
+              durationLimits,
+            }
+          : null),
+        actorUserId,
+      },
+    });
   }
 
   static async findAllByUpId(

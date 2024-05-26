@@ -10,10 +10,12 @@ const removeMember = async ({
   memberId,
   teamId,
   isOrg,
+  actorUserId,
 }: {
   memberId: number;
   teamId: number;
   isOrg: boolean;
+  actorUserId?: number;
 }) => {
   const [membership] = await prisma.$transaction([
     prisma.membership.delete({
@@ -108,7 +110,7 @@ const removeMember = async ({
 
   // Deleted managed event types from this team from this member
   await prisma.eventType.deleteMany({
-    where: { parent: { teamId: teamId }, userId: membership.userId },
+    where: { parent: { teamId: teamId }, userId: membership.userId, actorUserId },
   });
 
   return { membership };

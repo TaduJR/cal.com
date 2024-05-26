@@ -6,7 +6,6 @@ import { HttpError } from "@calcom/lib/http-error";
 import { defaultResponder } from "@calcom/lib/server";
 import prisma from "@calcom/prisma";
 import { SchedulingType } from "@calcom/prisma/enums";
-import { withQueryContext } from "@calcom/prisma/extensions/audit-log-creator";
 
 import type { schemaEventTypeBaseBodyParams } from "~/lib/validations/event-type";
 import { schemaEventTypeEditBodyParams, schemaEventTypeReadPublic } from "~/lib/validations/event-type";
@@ -233,9 +232,7 @@ export async function patchHandler(req: NextApiRequest) {
     };
   }
   await checkPermissions(req, parsedBody);
-  const eventType = await prisma.eventType.update(
-    withQueryContext({ where: { id }, data }, { actorUserId: userId })
-  );
+  const eventType = await prisma.eventType.update({ where: { id }, data: { ...data, actorUserId: userId } });
   return { event_type: schemaEventTypeReadPublic.parse(eventType) };
 }
 

@@ -134,7 +134,7 @@ export const duplicateHandler = async ({ ctx, input }: DuplicateOptions) => {
       }
     }
 
-    const newEventType = await EventTypeRepository.create(data);
+    const newEventType = await EventTypeRepository.create(data, ctx.user.id);
 
     // Create custom inputs
     if (customInputs) {

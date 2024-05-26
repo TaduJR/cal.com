@@ -1,46 +1,43 @@
-export const CRUD = {
-  CREATE: "CREATE",
-  READ: "READ",
-  UPDATE: "UPDATE",
-  DELETE: "DELETE",
+import type { CRUD } from "./CRUD";
+
+export const EventTypeAuditLogOption = {
+  EventTypeCreate: "EventTypeCreate",
+  EventTypeUpdate: "EventTypeUpdate",
+  EventTypeDelete: "EventTypeDelete",
 } as const;
 
-export enum EventTypeAuditLogOption {
-  EventTypeCreate = "eventType.create",
-  EventTypeUpdate = "eventType.update",
-  EventTypeDelete = "eventType.delete",
-}
+export type EventTypeAuditLogOption = (typeof EventTypeAuditLogOption)[keyof typeof EventTypeAuditLogOption];
 
 export interface IEventTypeCreateLog {
-  actionType: EventTypeAuditLogOption.EventTypeCreate;
+  actionType: typeof EventTypeAuditLogOption.EventTypeCreate;
   actorUserId: number;
   target: {
-    targetEventId: number;
+    targetEvent: number | string;
   };
-  crud: CRUD.CREATE;
+  crud: typeof CRUD.CREATE;
   targetTeamId: number;
 }
 
 export interface IEventTypeUpdateLog {
-  actionType: EventTypeAuditLogOption.EventTypeUpdate;
+  actionType: typeof EventTypeAuditLogOption.EventTypeUpdate;
   actorUserId: number;
   target: {
-    targetEventId: number;
+    targetEvent: number | string;
     changedAttribute: {
       [propName: string]: unknown;
     };
   };
-  crud: CRUD.UPDATE;
+  crud: typeof CRUD.UPDATE;
   targetTeamId: number;
 }
 
 export interface IEventTypeDeleteLog {
-  actionType: EventTypeAuditLogOption.EventTypeDelete;
+  actionType: typeof EventTypeAuditLogOption.EventTypeDelete;
   actorUserId: number;
   target: {
-    targetEventId: number;
+    targetEvent: string;
   };
-  crud: CRUD.DELETE;
+  crud: typeof CRUD.DELETE;
   targetTeamId: number;
 }
 export type IEventTypeLog = IEventTypeCreateLog | IEventTypeUpdateLog | IEventTypeDeleteLog;

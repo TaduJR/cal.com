@@ -2,7 +2,7 @@ import type { Prisma } from "@prisma/client";
 import { PrismaClient as PrismaClientWithoutExtension } from "@prisma/client";
 import { withAccelerate } from "@prisma/extension-accelerate";
 
-import { auditLogCustomMethodClientExtension } from "./extensions/audit-log-creator";
+import { auditLogCustomMethodClientExtension } from "./extensions/audit-log-custom-method-client-extension";
 import { bookingIdempotencyKeyExtension } from "./extensions/booking-idempotency-key";
 import { excludePendingPaymentsExtension } from "./extensions/exclude-pending-payment-teams";
 import { bookingReferenceMiddleware } from "./middleware";

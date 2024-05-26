@@ -850,6 +850,7 @@ export const updateHandler = async ({ ctx, input }: UpdateOptions) => {
             s.numberRequired
         ),
         eventTypeId,
+        actorUserId: ctx.user.id,
       });
     } else {
       await removeSmsReminderFieldForBooking({ workflowId: id, eventTypeId });

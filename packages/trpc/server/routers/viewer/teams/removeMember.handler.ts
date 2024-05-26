@@ -47,6 +47,7 @@ export const removeMemberHandler = async ({ ctx, input }: RemoveMemberOptions) =
     teamId: input.teamId,
     memberId: input.memberId,
     isOrg: input.isOrg,
+    actorUserId: ctx.user.id,
   });
 
   // Sync Services
